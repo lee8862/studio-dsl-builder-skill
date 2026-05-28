@@ -33,6 +33,8 @@ For rule-heavy domains, ask up to two high-impact questions before generating un
 - **Decision rules/source of truth**: thresholds, required documents, policy KB, scoring rubric, SLA, branch conditions, approval matrix.
 - **System/data integration**: budget system, supplier system, OA/Feishu approval API, blacklist, contract repository, knowledge base, tool/provider IDs.
 
+For Feishu/Lark interactions, treat MCP wiring as a system-integration question. If the app must read/write Feishu Base, Sheets, Docx, Wiki, Drive, IM, tasks, calendar, contacts, HR, or AI Gateway quota, first consult `references/feishu-mcp-guide.md`. Then ask for the current Studio workspace's installed MCP/tool binding when needed, because MCP service URLs and generated DSL node/provider/tool IDs are workspace-specific.
+
 If the user does not answer and still wants output, generate a file labeled as an **internal import-ready skeleton**, include warnings about missing rules/data sources, and avoid claiming it is production-ready or fully runnable.
 
 ## Creation Workflow
@@ -58,7 +60,7 @@ If the user does not answer and still wants output, generate a file labeled as a
    - Use `agent-chat` for tool-calling agents that route between tools or sub-workflows.
 
 4. **Generate import-ready YAML.**
-   Use the hard rules in `references/schema-rules.md`. Use the graph patterns in `references/patterns.md`. Use the internal Studio default model unless the user specifies another model. Avoid inventing workspace-specific IDs. If a dataset, API, or tool resource is unknown and the user did not provide it, either ask or use a clean placeholder plus a warning.
+   Use the hard rules in `references/schema-rules.md`. Use the graph patterns in `references/patterns.md`. Use the internal Studio default model unless the user specifies another model. Avoid inventing workspace-specific IDs. If a dataset, API, MCP, or tool resource is unknown and the user did not provide it, either ask or use a clean placeholder plus a warning. For Feishu/Lark MCP actions, prefer MCP over raw OpenAPI HTTP when the internal guide says the domain/tool is available, but do not fabricate the current workspace's MCP provider/tool/node IDs.
 
 5. **Write a `.yml` file.**
    If no path is given, create a descriptive file under the current workspace, such as `studio-dsl-output/<slug>.yml`. Use stable, readable app and node names. Keep Chinese labels when the user uses Chinese.

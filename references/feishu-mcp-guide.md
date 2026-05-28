@@ -51,8 +51,11 @@ Do not embed Feishu user tokens, tenant access tokens, app secrets, cookies, or 
 
 ## Generation Rules
 
-- Do not invent Feishu MCP addresses, provider IDs, or tool IDs. Query the Base and use entries marked `已上线`.
+- Prefer MCP for Feishu/Lark interactions when the target domain/tool is available. For example, writing Feishu Base records should route to the `bitable` MCP domain rather than hand-building tenant-token HTTP calls.
+- Do not invent Feishu MCP addresses, provider IDs, tool IDs, node IDs, or workspace installation IDs. Query this Base for domain/service/tool guidance, then use the current Studio workspace's installed MCP/tool binding if the user provides it.
+- MCP service URLs in this Base are not enough to generate a fully wired Studio tool node. Dify/Studio assigns workspace-specific IDs when an MCP server/tool is installed in a space. If those IDs are missing, ask for them, ask for an exported sample node from that workspace, or generate a placeholder with a clear warning.
 - If a required domain or tool is `待上线`, do not generate an active tool node that pretends it is available. Add a placeholder/warning or ask the user whether to use an HTTP fallback.
 - For workflows that combine Feishu actions, model the domains explicitly in the spec. Example: "read Base records then send group notification" requires `bitable` plus `im`; if `im` is not deployed, the DSL should expose that gap.
 - For direct Feishu OpenAPI HTTP nodes, prefer internal MCP services when available. Use raw OpenAPI token flows only when the user explicitly asks for direct HTTP or the needed MCP domain is unavailable.
+- For "directly generate" requests where the workspace MCP IDs are unknown, output an import-ready skeleton only after placing MCP IDs behind obvious placeholders such as `PLEASE_FILL_MCP_PROVIDER_ID`, `PLEASE_FILL_MCP_TOOL_NAME`, or `PLEASE_FILL_INSTALLED_TOOL_ID`; do not call it fully runnable.
 - After selecting MCP/tool resources, still validate normal Studio DSL rules: runtime-safe node IDs, canvas-safe graph fields, model provider/name, and selectors/templates.

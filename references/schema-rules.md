@@ -186,6 +186,12 @@ Rules:
 
 Tool nodes are provider-specific. Do not generate arbitrary Tool nodes unless the provider schema is known.
 
+MCP-backed tool nodes are also workspace-specific:
+
+- A Feishu MCP service URL tells which domain to use, but not the installed provider/tool/node IDs in the user's Studio space.
+- Do not hardcode MCP provider IDs, tool IDs, or installed-node IDs from another workspace.
+- If the user has not provided the current workspace's MCP binding or an exported sample node, ask for it or use explicit placeholders and mark the DSL as an import-ready skeleton, not fully runnable.
+
 For file export in the existing KURO DSL generator, the known exporter is:
 
 - provider: `kurogames/dify-yml-exporter/dify_yml_exporter`
