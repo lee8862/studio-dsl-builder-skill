@@ -77,8 +77,9 @@ Rules:
 
 Rules:
 
-- Leave `model.provider` and `model.name` empty only when the target workspace model is unknown, and add a warning.
-- Use a real provider/name only when the user gives it or the target platform is known.
+- For internal KURO AI Studio DSL, default LLM nodes to `provider: kurogames/kuro_ai_gateway/kuro_ai_provider` and `name: claude-opus-4.7` unless the user specifies another model.
+- Leave `model.provider` and `model.name` empty only for generic external Dify environments where the target workspace model is unknown, and add a warning.
+- Use a user-provided provider/name when the user gives one.
 - Always include a system guard such as "只输出最终结果,不输出推理过程或 <think> 标签" for structured or user-facing outputs.
 - For structured JSON outputs, pair the LLM with a downstream Code node that robustly extracts/parses JSON.
 - In `workflow` mode, do not write `memory` and do not reference `{{#sys.query#}}`.

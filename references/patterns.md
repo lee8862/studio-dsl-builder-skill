@@ -208,3 +208,17 @@ Best effort "ready" means:
 - **Import-ready**: imports cleanly, but has placeholders the user must fill.
 
 Do not call a placeholder-heavy DSL fully runnable.
+
+## Internal Studio Defaults
+
+For internal KURO AI Studio generation, fill LLM model config by default:
+
+```yaml
+model:
+  completion_params: {temperature: 0.3}
+  mode: chat
+  name: claude-opus-4.7
+  provider: kurogames/kuro_ai_gateway/kuro_ai_provider
+```
+
+Only leave model fields blank when explicitly generating for an unknown external Dify workspace.
