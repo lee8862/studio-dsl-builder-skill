@@ -50,6 +50,17 @@ viewport: {x: 0, y: 0, zoom: 0.7}
 
 Avoid simplified graph entries such as top-level node `type: llm`, edges without handles, or missing `positionAbsolute`; these can import but crash or blank the canvas.
 
+## Node IDs and Template Variables
+
+Node IDs must be safe for Studio's runtime template parser:
+
+- Use `start`, `end`, or timestamp-like numeric IDs such as `1700000005`.
+- Do not use human-readable IDs with hyphens, such as `node-search-reply-llm`.
+- Any node ID referenced inside `{{#node_id.output#}}` must match `^[a-zA-Z0-9_]{1,50}$`.
+- When generating from internal client IDs, keep a `client_id -> runtime_node_id` map and replace all references before output: node `id`, edge `source`/`target`, `value_selector`, `variable_selector`, and every `{{#...#}}` template.
+
+Why this matters: the canvas editor may display `{{#node-search-reply-llm.text#}}` as a variable chip, but the runtime parser does not recognize hyphens in template variables and will output the raw string.
+
 ## Mode Rules
 
 | app.mode | Terminal node | `{{#sys.query#}}` | LLM `memory` |

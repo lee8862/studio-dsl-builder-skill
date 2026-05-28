@@ -117,6 +117,7 @@ Rules:
 - Every branch must end in `answer`.
 - Use canvas-safe graph entries: top-level nodes are `type: custom`, the actual node type is in `data.type`, and every edge has `sourceHandle`, `targetHandle`, `type: custom`, `zIndex`, and edge `data`.
 - If-else nodes use `data.cases`; do not use legacy `data.conditions` / `else_id`.
+- Use runtime-safe node IDs. Prefer timestamp-like numeric IDs in final YAML, and replace any internal `client_id`/human-readable node names in template variables such as `{{#1700000005.text#}}`.
 
 ## Workflow: Batch / API Job
 

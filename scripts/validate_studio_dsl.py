@@ -14,6 +14,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+RUNTIME_NODE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_]{1,50}$")
+RUNTIME_TEMPLATE_PATTERN = re.compile(r"\{\{#([a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9_]{0,29}){1,10})#\}\}")
+LOOSE_TEMPLATE_PATTERN = re.compile(r"\{\{#([^#\n]+)#\}\}")
+
 
 def load_dsl(path: Path) -> Any:
     text = path.read_text(encoding="utf-8-sig")
@@ -33,6 +37,17 @@ def selector_text(value: Any) -> str:
     if isinstance(value, list):
         return ".".join(str(x) for x in value)
     return str(value)
+
+
+def iter_strings(value: Any, path: str = "$"):
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from iter_strings(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from iter_strings(item, f"{path}.{key}")
 
 
 def collect_code_outputs(node: dict[str, Any]) -> set[str]:
@@ -117,6 +132,10 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         if not node_id:
             errors.append(f"node without id: {node}")
             continue
+        if not RUNTIME_NODE_ID_PATTERN.fullmatch(node_id):
+            errors.append(
+                f"node id '{node_id}' is not runtime-template safe; use letters, numbers, or underscores only"
+            )
         if node_id in by_id:
             errors.append(f"duplicate node id: {node_id}")
         by_id[node_id] = node
@@ -234,6 +253,26 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
                         errors.append(f"end output selector references missing node {selector_text(selector)}")
                     elif src_key not in output_by_node.get(src_id, set()) and output_by_node.get(src_id):
                         warnings.append(f"end output selector {selector_text(selector)} not declared in upstream outputs")
+
+    for string_path, text in iter_strings(dsl):
+        for match in LOOSE_TEMPLATE_PATTERN.finditer(text):
+            full = match.group(0)
+            inner = match.group(1)
+            if not RUNTIME_TEMPLATE_PATTERN.fullmatch(full):
+                errors.append(
+                    f"template variable {full!r} at {string_path} is not runtime-parseable; "
+                    "use {{#node_id.output#}} with letters/numbers/underscores only"
+                )
+                continue
+            selector = inner.split(".")
+            src_id = selector[0]
+            src_key = selector[1] if len(selector) > 1 else ""
+            if src_id in {"sys", "env", "conversation"}:
+                continue
+            if src_id not in by_id:
+                errors.append(f"template variable {full!r} at {string_path} references missing node {src_id}")
+            elif src_key not in output_by_node.get(src_id, set()) and output_by_node.get(src_id):
+                warnings.append(f"template variable {full!r} at {string_path} not declared in upstream outputs")
 
     if mode == "workflow" and type_counts.get("answer", 0):
         errors.append("workflow mode must not use answer nodes")

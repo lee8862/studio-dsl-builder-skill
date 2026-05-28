@@ -86,6 +86,7 @@ Common repair targets:
 - URL/header/body fields contain natural language instructions.
 - KB/model/tool IDs were hallucinated.
 - Code node outputs do not match the Python `return` keys.
+- Answer/LLM templates render raw strings such as `{{#node-reply.text#}}` because the node ID contains hyphens; replace final YAML node IDs and all selectors/templates with runtime-safe IDs.
 
 ## Validation Standard
 
@@ -95,6 +96,7 @@ A DSL is not "done" just because YAML parses. It must pass:
 - Every edge references existing source and target nodes.
 - App mode terminal nodes are correct.
 - Every selector points to a real upstream node/output.
+- Node IDs and `{{#node.output#}}` template variables are runtime-safe; do not leave hyphenated `node-*` IDs in final YAML.
 - LLM model config is filled with the internal Studio default model or the user-provided model.
 - Resource placeholders are clean and contained in the correct machine fields.
 - No executable field contains explanatory prose.
