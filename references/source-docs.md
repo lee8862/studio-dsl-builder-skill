@@ -41,6 +41,16 @@ Useful files:
 - `tests/cases.jsonl`: behavioral regression cases.
 - `tests/reports/runs/*/summary.md`: observed pass/fail behavior.
 
+## Feishu/Lark MCP Source
+
+Internal Base:
+
+```text
+https://kurogame.feishu.cn/base/Ktdbb6EYXanw7Ns5Uj0cEMVWnrb
+```
+
+Use it when a generated Studio DSL needs to interact with Feishu/Lark docs, Wiki, Base, Sheets, Drive, IM, tasks, calendar, contacts, HR, or AI Gateway quota. The distilled workflow lives in `references/feishu-mcp-guide.md`; re-query the Base if tool availability, token mode, or MCP addresses may have changed.
+
 ## Safety Notes
 
 - Do not copy credentials, API keys, cookies, app keys, user tokens, or console API headers into this skill or into generated public examples.

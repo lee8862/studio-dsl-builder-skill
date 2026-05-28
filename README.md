@@ -19,6 +19,7 @@ studio-dsl-builder-skill/
 |-- agents/
 |   `-- openai.yaml
 |-- references/
+|   |-- feishu-mcp-guide.md
 |   |-- patterns.md
 |   |-- schema-rules.md
 |   `-- source-docs.md
@@ -104,6 +105,7 @@ Use the studio-dsl-builder skill. Create a workflow app named 「企业采购申
 - 输入字段、字段类型、是否必填、枚举项。
 - 审查或审批规则，例如阈值、风险等级、驳回条件、必需附件、审批矩阵。
 - 是否需要接入外部系统，例如预算系统、供应商库、飞书审批、知识库、黑名单。
+- 如果涉及飞书/Lark 文档、Wiki、多维表格、电子表格、云盘、IM、任务、日历、联系人等互动，skill 会优先参考内部 `MCP接入指南` Base 来选择 MCP 域、Token 模式和已上线工具。
 - 期望输出字段，例如 `status`、`risk_level`、`reason`、`optimized_copy`。
 - 应用模式：`workflow`、`advanced-chat/chatflow`、`agent-chat`。
 

@@ -48,6 +48,7 @@ If the user does not answer and still wants output, generate a file labeled as a
    - node chain and branch logic
    - domain decision rules or the explicit decision to use generic defaults
    - Studio resources: KB dataset IDs, APIs, tools, env vars, and LLM model override if any
+   - Feishu/Lark resource domain and MCP/tool source if the workflow reads/writes Feishu docs, Wiki, Base, Sheets, Drive, IM, tasks, calendar, contacts, or AI Gateway quota
    - error handling and fallback behavior
    - warnings/placeholders that remain
 
@@ -108,6 +109,7 @@ Load only what is needed:
 
 - `references/schema-rules.md`: hard import/runtime rules and known traps.
 - `references/patterns.md`: reusable graph patterns and spec/output templates.
+- `references/feishu-mcp-guide.md`: internal Feishu/Lark MCP routing source and CLI lookup workflow.
 - `references/source-docs.md`: source document paths and when to inspect them.
 
 Use `scripts/validate_studio_dsl.py` every time you create or patch a DSL file.
