@@ -1,0 +1,4 @@
+interface:
+  display_name: "Studio DSL Builder"
+  short_description: "Generate import-ready Studio DSL apps"
+  default_prompt: "Use $studio-dsl-builder to generate an import-ready Studio workflow DSL from my requirements."
