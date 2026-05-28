@@ -21,6 +21,35 @@ workflow:
 
 Use the target platform's current DSL version when known. For the local KURO release docs, `0.6.0` is the documented import version.
 
+## Canvas Graph Shape
+
+Generated graphs must be canvas-safe, not just parseable. Dify/AI Studio imports into a ReactFlow-style canvas and expects these fields.
+
+Each node:
+
+- top-level `type: custom`
+- `data.type` contains the real node type, such as `start`, `llm`, `code`, `if-else`, `http-request`, `answer`, or `end`
+- `position` and `positionAbsolute`
+- `sourcePosition: right`, `targetPosition: left`
+- top-level `selected: false`, `width`, `height`
+- `data.desc` and `data.selected: false`
+
+Each edge:
+
+- `type: custom`
+- `sourceHandle` and `targetHandle: target`
+- `zIndex: 0`
+- `data.isInIteration: false`, `data.isInLoop: false`
+- `data.sourceType` and `data.targetType`
+
+The graph should include:
+
+```yaml
+viewport: {x: 0, y: 0, zoom: 0.7}
+```
+
+Avoid simplified graph entries such as top-level node `type: llm`, edges without handles, or missing `positionAbsolute`; these can import but crash or blank the canvas.
+
 ## Mode Rules
 
 | app.mode | Terminal node | `{{#sys.query#}}` | LLM `memory` |
@@ -78,6 +107,25 @@ Operator value types are fragile:
 
 For multi-class classification, prefer `LLM -> Code normalize -> one if-else` instead of many chained if-else nodes.
 
+Use current canvas schema:
+
+```yaml
+data:
+  type: if-else
+  cases:
+    - case_id: 'true'
+      id: 'true'
+      logical_operator: and
+      conditions:
+        - id: cond-1
+          variable_selector: [parse, intent]
+          comparison_operator: is
+          value: search
+          varType: string
+```
+
+Do not generate legacy `data.conditions` or `else_id`. The default branch edge uses `sourceHandle: 'false'`. Case branches use their `case_id` as `sourceHandle`.
+
 ## Answer Node
 
 Only for `advanced-chat`.
@@ -115,7 +163,8 @@ Rules:
 - Keep `url` as a clean URL string. Do not append Chinese instructions or comments inside the URL.
 - Put user-facing instructions in warnings, not executable fields.
 - Use env vars for secrets, for example `{{#env.crm_token#}}`.
-- `authorization.type` must match the target schema. For generated placeholders, prefer no-auth or env-token patterns.
+- `authorization.type` must match the target schema. Prefer `no-auth` or `api-key` with env-token patterns.
+- Use `retry_config`, not legacy `retry`.
 - `body.type` and `body.data` must agree:
   - `none`: empty string
   - `json`: object/string JSON body

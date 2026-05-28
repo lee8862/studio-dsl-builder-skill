@@ -115,6 +115,8 @@ Rules:
 
 - If using `in`, `value` is an array.
 - Every branch must end in `answer`.
+- Use canvas-safe graph entries: top-level nodes are `type: custom`, the actual node type is in `data.type`, and every edge has `sourceHandle`, `targetHandle`, `type: custom`, `zIndex`, and edge `data`.
+- If-else nodes use `data.cases`; do not use legacy `data.conditions` / `else_id`.
 
 ## Workflow: Batch / API Job
 
@@ -163,6 +165,7 @@ Rules:
 
 - Put API host and token in `workflow.environment_variables`.
 - Use clean URL strings, for example `{{#env.crm_base_url#}}/orders/{{#start.order_no#}}`.
+- For request tokens returned by a previous HTTP node, insert a Code node to parse the token before adding it to an Authorization header. Do not use the whole HTTP response body as a bearer token.
 - Warnings carry "fill this later" instructions.
 
 ## Agent-Chat Meta-Agent
@@ -189,7 +192,7 @@ When creating a DSL file:
 
 1. Generate the YAML.
 2. Write it to `<cwd>/dify-dsl-output/<slug>.yml` unless user gives a path.
-3. Run `scripts/validate_studio_dsl.py`.
+3. Run `scripts/validate_studio_dsl.py`; fix both structural errors and canvas-shape errors.
 4. Patch until errors are gone.
 5. Final reply:
    - file path

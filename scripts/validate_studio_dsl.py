@@ -104,6 +104,9 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
     type_counts: dict[str, int] = {}
     output_by_node: dict[str, set[str]] = {}
 
+    if mode != "agent-chat" and not isinstance(graph.get("viewport"), dict):
+        errors.append("workflow.graph.viewport must be present for canvas import")
+
     for node in nodes:
         if not isinstance(node, dict):
             errors.append("node entry is not an object")
@@ -118,6 +121,19 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             errors.append(f"duplicate node id: {node_id}")
         by_id[node_id] = node
         type_counts[node_type] = type_counts.get(node_type, 0) + 1
+
+        if mode != "agent-chat":
+            if node.get("type") != "custom":
+                errors.append(f"node '{node_title(node)}' top-level type must be custom for canvas rendering")
+            for key in ("position", "positionAbsolute"):
+                if not isinstance(node.get(key), dict):
+                    errors.append(f"node '{node_title(node)}' missing {key}")
+            for key in ("sourcePosition", "targetPosition", "selected", "width", "height"):
+                if key not in node:
+                    errors.append(f"node '{node_title(node)}' missing canvas field {key}")
+            for key in ("desc", "selected"):
+                if key not in data:
+                    errors.append(f"node '{node_title(node)}' data missing canvas field {key}")
 
         outputs = collect_code_outputs(node)
         if node_type == "llm":
@@ -136,6 +152,9 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             model = data.get("model") or {}
             if not model.get("provider") or not model.get("name"):
                 warnings.append(f"LLM node '{node_title(node)}' has empty model provider/name")
+            memory = data.get("memory")
+            if isinstance(memory, dict) and ("enabled" in memory or "role_prefix" in memory):
+                warnings.append(f"LLM node '{node_title(node)}' uses legacy memory shape; prefer query_prompt_template/window")
             if mode == "workflow":
                 if "memory" in data:
                     errors.append(f"workflow LLM node '{node_title(node)}' must not contain memory")
@@ -161,14 +180,33 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
                 errors.append(f"HTTP node '{node_title(node)}' url contains prose/instructions")
             if "PLEASE_FILL" in url:
                 warnings.append(f"HTTP node '{node_title(node)}' contains URL placeholder")
+            if "retry" in data:
+                errors.append(f"HTTP node '{node_title(node)}' uses legacy retry; use retry_config")
+            auth = data.get("authorization") or {}
+            if isinstance(auth, dict) and auth.get("type") not in {"no-auth", "api-key"}:
+                errors.append(f"HTTP node '{node_title(node)}' has unsupported authorization.type {auth.get('type')!r}")
 
         if node_type == "if-else":
+            if "conditions" in data or "else_id" in data:
+                errors.append(f"if-else node '{node_title(node)}' uses legacy conditions/else_id; use cases plus false edge")
+            if not isinstance(data.get("cases"), list) or not data.get("cases"):
+                errors.append(f"if-else node '{node_title(node)}' must have non-empty cases array")
             for case in data.get("cases") or []:
                 if not isinstance(case, dict):
                     continue
+                if not case.get("case_id"):
+                    errors.append(f"if-else node '{node_title(node)}' case missing case_id")
+                if not case.get("id"):
+                    errors.append(f"if-else node '{node_title(node)}' case missing id")
+                if not case.get("logical_operator"):
+                    errors.append(f"if-else node '{node_title(node)}' case missing logical_operator")
                 for condition in case.get("conditions") or []:
                     if not isinstance(condition, dict):
                         continue
+                    if not condition.get("id"):
+                        errors.append(f"if-else node '{node_title(node)}' condition missing id")
+                    if not condition.get("varType"):
+                        errors.append(f"if-else node '{node_title(node)}' condition missing varType")
                     op = str(condition.get("comparison_operator") or "")
                     want = condition_value_required(op)
                     has_value = "value" in condition and condition.get("value") is not None
@@ -216,6 +254,31 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             errors.append(f"edge {edge.get('id')} references missing source {source}")
         if target not in by_id:
             errors.append(f"edge {edge.get('id')} references missing target {target}")
+        if mode != "agent-chat":
+            if edge.get("type") != "custom":
+                errors.append(f"edge {edge.get('id')} type must be custom for canvas rendering")
+            for key in ("sourceHandle", "targetHandle", "zIndex"):
+                if key not in edge:
+                    errors.append(f"edge {edge.get('id')} missing canvas field {key}")
+            edge_data = edge.get("data")
+            if not isinstance(edge_data, dict):
+                errors.append(f"edge {edge.get('id')} missing data mapping")
+            else:
+                for key in ("isInIteration", "isInLoop", "sourceType", "targetType"):
+                    if key not in edge_data:
+                        errors.append(f"edge {edge.get('id')} data missing {key}")
+
+    for node_id, node in by_id.items():
+        data = node.get("data") or {}
+        if data.get("type") != "if-else":
+            continue
+        handles = {str(edge.get("sourceHandle")) for edge in edges if isinstance(edge, dict) and edge.get("source") == node_id}
+        for case in data.get("cases") or []:
+            case_id = str(case.get("case_id") or "")
+            if case_id and case_id not in handles:
+                warnings.append(f"if-else node '{node_title(node)}' case {case_id!r} has no outgoing edge")
+        if "false" not in handles:
+            warnings.append(f"if-else node '{node_title(node)}' has no false/default outgoing edge")
 
     return errors, warnings
 
