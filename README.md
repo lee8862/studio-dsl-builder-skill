@@ -1,6 +1,6 @@
 # Studio DSL Builder Skill
 
-用于在 Codex 或 Claude Code 中生成、修复、校验 KURO AI Studio / Dify-compatible 的可导入 DSL YAML。
+用于在 Codex 或 Claude Code 或者其他通用agent中生成、修复、校验 KURO AI Studio / Dify-compatible 的可导入 DSL YAML。
 
 这个 skill 的目标不是只给架构建议，而是尽量产出一个能直接导入的 `.yml` 文件，并在输出前用内置校验脚本做结构检查。
 
@@ -151,6 +151,9 @@ git -C "$env:USERPROFILE\.claude\skills\studio-dsl-builder" pull
 - 不要把真实 API Key、Cookie、用户 Token、内部 Console Header 写进需求或提交到仓库。
 - 需要外部系统鉴权时，优先使用环境变量占位，例如 `{{#env.crm_token#}}`。
 - 发布到公开仓库前，检查 `references/source-docs.md` 和示例 DSL 中是否包含内部路径、内部接口、真实数据集 ID 或模型供应商凭证。
+
+## 声明
+- 仅供内部交流参考使用，不代表任何实际含义
 
 ## 参考
 
