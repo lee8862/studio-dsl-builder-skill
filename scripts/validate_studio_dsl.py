@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight structural validator for Studio/Dify-compatible DSL YAML.
+"""Lightweight structural validator for internal KURO AI Studio DSL YAML.
 
 This catches the common "parseable but not runnable/importable" mistakes that
 show up in generated DSL files. It is intentionally conservative: warnings are
@@ -151,7 +151,7 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         if node_type == "llm":
             model = data.get("model") or {}
             if not model.get("provider") or not model.get("name"):
-                warnings.append(f"LLM node '{node_title(node)}' has empty model provider/name")
+                errors.append(f"LLM node '{node_title(node)}' must set internal Studio model provider/name")
             memory = data.get("memory")
             if isinstance(memory, dict) and ("enabled" in memory or "role_prefix" in memory):
                 warnings.append(f"LLM node '{node_title(node)}' uses legacy memory shape; prefer query_prompt_template/window")

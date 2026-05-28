@@ -45,5 +45,5 @@ Useful files:
 
 - Do not copy credentials, API keys, cookies, app keys, user tokens, or console API headers into this skill or into generated public examples.
 - Deployment handover files may contain operational context or credentials. Treat them as private operational records, not skill source material.
-- Re-check the exact KURO AI Studio/Dify release version before changing node schemas or import rules.
+- Re-check the exact internal KURO AI Studio release version before changing node schemas or import rules.
 - Prefer current exported YAML and node schema docs over old memory or summaries when they disagree.

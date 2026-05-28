@@ -1,6 +1,6 @@
 # Studio DSL Generation Patterns
 
-Use these patterns as building blocks for KURO AI Studio/Dify-compatible DSL apps. Keep the final YAML specific to the user's requirement.
+Use these patterns as building blocks for internal KURO AI Studio DSL apps. Keep the final YAML specific to the user's requirement.
 
 ## Spec Template
 
@@ -23,7 +23,7 @@ Before generating, hold a compact internal spec:
   "resources": {
     "datasets": ["PLEASE_FILL_DATASET_ID"],
     "apis": [],
-    "models": []
+    "models": [{"provider": "kurogames/kuro_ai_gateway/kuro_ai_provider", "name": "claude-opus-4.7"}]
   },
   "fallbacks": ["知识库为空时给兜底回复"],
   "warnings": []
@@ -59,13 +59,13 @@ Ask at most two questions, chosen by impact:
 Default behavior:
 
 - If the user answers, reflect the rules in nodes, prompts, branches, and End outputs.
-- If the user says "直接生成/用默认", generate a generic skeleton and include warnings.
-- If the user gave only a name and app mode for a rule-heavy app, ask first. Do not silently produce a generic workflow and call it complete.
+- If the user says "直接生成/用默认", generate an internal skeleton and include warnings.
+- If the user gave only a name and app mode for a rule-heavy app, ask first. Do not silently produce a skeleton and call it complete.
 
 Generic skeleton label:
 
 ```text
-This DSL is import-ready as a generic skeleton. It still needs real policy rules/data sources before production use.
+This DSL is import-ready as an internal skeleton. It still needs real policy rules/data sources before production use.
 ```
 
 ## Advanced-Chat: Simple LLM Assistant
@@ -191,7 +191,7 @@ Rules:
 When creating a DSL file:
 
 1. Generate the YAML.
-2. Write it to `<cwd>/dify-dsl-output/<slug>.yml` unless user gives a path.
+2. Write it to `<cwd>/studio-dsl-output/<slug>.yml` unless user gives a path.
 3. Run `scripts/validate_studio_dsl.py`; fix both structural errors and canvas-shape errors.
 4. Patch until errors are gone.
 5. Final reply:
@@ -204,10 +204,10 @@ When creating a DSL file:
 
 Best effort "ready" means:
 
-- **Fully runnable**: user provided model, datasets, APIs, tool provider IDs, env values.
+- **Fully runnable**: model is set to the internal Studio default or user-provided model, and the user provided datasets, APIs, tool provider IDs, and env values.
 - **Import-ready**: imports cleanly, but has placeholders the user must fill.
 
-Do not call a placeholder-heavy DSL fully runnable.
+Do not call a resource-placeholder-heavy DSL fully runnable.
 
 ## Internal Studio Defaults
 
@@ -221,4 +221,4 @@ model:
   provider: kurogames/kuro_ai_gateway/kuro_ai_provider
 ```
 
-Only leave model fields blank when explicitly generating for an unknown external Dify workspace.
+Do not leave model fields blank for internal Studio DSL.

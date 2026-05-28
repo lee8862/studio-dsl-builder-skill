@@ -1,6 +1,6 @@
 # Studio DSL Schema Rules
 
-Use these rules when generating, repairing, or validating Studio DSL YAML for KURO AI Studio/Dify-compatible runtimes.
+Use these rules when generating, repairing, or validating Studio DSL YAML for internal KURO AI Studio.
 
 ## Top Level
 
@@ -19,11 +19,11 @@ workflow:
     edges: []
 ```
 
-Use the target platform's current DSL version when known. For the local KURO release docs, `0.6.0` is the documented import version.
+Use `version: 0.6.0`, the documented import version for the current internal KURO release docs, unless the internal release docs are updated.
 
 ## Canvas Graph Shape
 
-Generated graphs must be canvas-safe, not just parseable. Dify/AI Studio imports into a ReactFlow-style canvas and expects these fields.
+Generated graphs must be canvas-safe, not just parseable. Internal Studio imports into a ReactFlow-style canvas and expects these fields.
 
 Each node:
 
@@ -78,7 +78,6 @@ Rules:
 Rules:
 
 - For internal KURO AI Studio DSL, default LLM nodes to `provider: kurogames/kuro_ai_gateway/kuro_ai_provider` and `name: claude-opus-4.7` unless the user specifies another model.
-- Leave `model.provider` and `model.name` empty only for generic external Dify environments where the target workspace model is unknown, and add a warning.
 - Use a user-provided provider/name when the user gives one.
 - Always include a system guard such as "只输出最终结果,不输出推理过程或 <think> 标签" for structured or user-facing outputs.
 - For structured JSON outputs, pair the LLM with a downstream Code node that robustly extracts/parses JSON.
@@ -92,7 +91,7 @@ Rules:
 - `data.outputs` keys must match every downstream `value_selector` key.
 - Python `return` keys should match `data.outputs`.
 - Use try/except for LLM JSON parsing and external data normalization.
-- Dify sandbox commonly supports `json`, `re`, `math`, `datetime`, `string`, `base64`, `hashlib`, `uuid`, and `urllib.parse`.
+- Studio Code node sandbox commonly supports `json`, `re`, `math`, `datetime`, `string`, `base64`, `hashlib`, `uuid`, and `urllib.parse`.
 
 Use a Code node to create constant values for `end` outputs. Do not put raw constants directly into `end.outputs[].value_selector`.
 
@@ -185,7 +184,7 @@ Do not include credentials in skills or generated DSL. Use placeholders or envir
 
 ## Template Engine Trap
 
-Dify scans `{{#...#}}` patterns even inside some prompt/code strings. If a literal template marker must appear in a generated Code string, construct it by concatenation, for example:
+Studio scans `{{#...#}}` patterns even inside some prompt/code strings. If a literal template marker must appear in a generated Code string, construct it by concatenation, for example:
 
 ```python
 "{" + "{#sys.query#}" + "}"
@@ -195,10 +194,9 @@ Dify scans `{{#...#}}` patterns even inside some prompt/code strings. If a liter
 
 Use warnings for:
 
-- Empty model provider/name.
 - Placeholder dataset IDs.
 - Placeholder URLs.
 - Missing tool provider IDs.
 - Environment variables the user must fill.
 
-Warnings do not make a YAML invalid if the fields are clean placeholders and the user asked to generate before providing resources.
+Warnings do not make a YAML invalid if the fields are clean resource placeholders and the user asked to generate before providing resources.

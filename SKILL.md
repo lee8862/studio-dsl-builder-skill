@@ -1,13 +1,13 @@
 ---
 name: studio-dsl-builder
-description: Generate, repair, and validate import-ready Studio DSL YAML files for workflow, advanced-chat/chatflow, and agent-chat apps on KURO AI Studio/Dify-compatible platforms. Use when the user asks to create a Studio agent/workflow/app from requirements, convert a product idea into DSL YAML, produce a usable `.yml` file, fix generated DSL import/runtime errors, or check whether a Studio DSL is structurally runnable.
+description: Generate, repair, and validate import-ready Studio DSL YAML files for workflow, advanced-chat/chatflow, and agent-chat apps on internal KURO AI Studio. Use when the user asks to create a Studio agent/workflow/app from requirements, convert a product idea into DSL YAML, produce a usable `.yml` file, fix generated DSL import/runtime errors, or check whether a Studio DSL is structurally runnable.
 ---
 
 # Studio DSL Builder
 
 ## Objective
 
-Turn user requirements into a real Studio DSL `.yml` that can be imported into KURO AI Studio or a compatible Dify-based environment with minimal manual work. Do not stop at architecture advice unless the user explicitly asks for advice only.
+Turn user requirements into a real Studio DSL `.yml` that can be imported into internal KURO AI Studio with minimal manual work. Do not stop at architecture advice unless the user explicitly asks for advice only.
 
 Prefer creating or patching an actual YAML file in the current workspace or the user-provided path. Also provide a short summary and the file path. If the user requests inline output, include the YAML in a fenced block after writing the file.
 
@@ -33,7 +33,7 @@ For rule-heavy domains, ask up to two high-impact questions before generating un
 - **Decision rules/source of truth**: thresholds, required documents, policy KB, scoring rubric, SLA, branch conditions, approval matrix.
 - **System/data integration**: budget system, supplier system, OA/Feishu approval API, blacklist, contract repository, knowledge base, tool/provider IDs.
 
-If the user does not answer and still wants output, generate a file labeled as a **generic import-ready skeleton**, include warnings about missing rules/data sources, and avoid claiming it is production-ready or fully runnable.
+If the user does not answer and still wants output, generate a file labeled as an **internal import-ready skeleton**, include warnings about missing rules/data sources, and avoid claiming it is production-ready or fully runnable.
 
 ## Creation Workflow
 
@@ -47,7 +47,7 @@ If the user does not answer and still wants output, generate a file labeled as a
    - inputs and outputs
    - node chain and branch logic
    - domain decision rules or the explicit decision to use generic defaults
-   - external resources: KB dataset IDs, APIs, tools, model provider/name, env vars
+   - Studio resources: KB dataset IDs, APIs, tools, env vars, and LLM model override if any
    - error handling and fallback behavior
    - warnings/placeholders that remain
 
@@ -57,10 +57,10 @@ If the user does not answer and still wants output, generate a file labeled as a
    - Use `agent-chat` for tool-calling agents that route between tools or sub-workflows.
 
 4. **Generate import-ready YAML.**
-   Use the hard rules in `references/schema-rules.md`. Use the graph patterns in `references/patterns.md`. Avoid inventing workspace-specific IDs. If a resource is unknown and the user did not provide it, either ask or use a clean placeholder plus a warning.
+   Use the hard rules in `references/schema-rules.md`. Use the graph patterns in `references/patterns.md`. Use the internal Studio default model unless the user specifies another model. Avoid inventing workspace-specific IDs. If a dataset, API, or tool resource is unknown and the user did not provide it, either ask or use a clean placeholder plus a warning.
 
 5. **Write a `.yml` file.**
-   If no path is given, create a descriptive file under the current workspace, such as `dify-dsl-output/<slug>.yml`. Use stable, readable app and node names. Keep Chinese labels when the user uses Chinese.
+   If no path is given, create a descriptive file under the current workspace, such as `studio-dsl-output/<slug>.yml`. Use stable, readable app and node names. Keep Chinese labels when the user uses Chinese.
 
 6. **Validate before finalizing.**
    Run:
@@ -95,8 +95,8 @@ A DSL is not "done" just because YAML parses. It must pass:
 - Every edge references existing source and target nodes.
 - App mode terminal nodes are correct.
 - Every selector points to a real upstream node/output.
-- LLM model config is either a real known workspace model or intentionally blank with warnings.
-- External resource placeholders are clean and contained in the correct machine fields.
+- LLM model config is filled with the internal Studio default model or the user-provided model.
+- Resource placeholders are clean and contained in the correct machine fields.
 - No executable field contains explanatory prose.
 - Branches terminate in an `answer` or `end` path appropriate to the app mode.
 
@@ -119,4 +119,4 @@ Final responses should be concise and operational:
 - List only remaining placeholders or manual steps.
 - Mention validator result.
 
-Do not present generated YAML as "ready" if validation failed. If a file has intentional placeholders, call it "import-ready after filling placeholders" rather than "fully runnable".
+Do not present generated YAML as "ready" if validation failed. If a file has resource placeholders, call it "import-ready after filling placeholders" rather than "fully runnable".

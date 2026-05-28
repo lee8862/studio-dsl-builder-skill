@@ -1,6 +1,6 @@
 # Studio DSL Builder Skill
 
-用于在 Codex 或 Claude Code 或者其他通用agent中生成、修复、校验 KURO AI Studio / Dify-compatible 的可导入 DSL YAML。
+用于在 Codex、Claude Code 或其他通用 agent 中生成、修复、校验内部 KURO AI Studio 可导入 DSL YAML。
 
 这个 skill 的目标不是只给架构建议，而是尽量产出一个能直接导入的 `.yml` 文件，并在输出前用内置校验脚本做结构检查。
 
@@ -107,7 +107,7 @@ Use the studio-dsl-builder skill. Create a workflow app named 「企业采购申
 - 期望输出字段，例如 `status`、`risk_level`、`reason`、`optimized_copy`。
 - 应用模式：`workflow`、`advanced-chat/chatflow`、`agent-chat`。
 
-如果信息不足，skill 会优先反问最多两个关键问题。你也可以明确说“使用默认值直接生成”，它会生成一个带占位提醒的可导入骨架。
+如果信息不足，skill 会优先反问最多两个关键问题。你也可以明确说“使用默认值直接生成”，它会生成一个带资源占位提醒的内部可导入骨架。
 
 ## 校验生成的 YAML
 
@@ -123,7 +123,7 @@ python scripts/validate_studio_dsl.py path/to/app.yml
 python ~/.codex/skills/studio-dsl-builder/scripts/validate_studio_dsl.py path/to/app.yml
 ```
 
-校验脚本会检查基础结构、节点边、变量选择器、终止节点类型、常见节点配置错误等问题。通过校验不代表业务规则已经完整，只代表 DSL 结构更接近可导入状态。
+校验脚本会检查基础结构、画布结构、节点边、变量选择器、终止节点类型、模型配置、常见节点配置错误等问题。通过校验不代表业务规则已经完整，只代表 DSL 结构更接近可导入状态。
 
 ## 更新
 
