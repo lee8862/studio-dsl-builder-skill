@@ -208,7 +208,8 @@ When creating a DSL file:
 
 1. Generate the YAML.
 2. Write it to `<cwd>/studio-dsl-output/<slug>.yml` unless user gives a path.
-3. Run `scripts/validate_studio_dsl.py`; fix both structural errors and canvas-shape errors.
+3. Run `scripts/validate_studio_dsl.py --profile generated <path>` for newly generated DSL; fix structural errors and canvas-shape errors.
+   For real Studio exports or hand-patched production YAML, run `scripts/validate_studio_dsl.py <path>` with the default/base profile so canvas decoration drift is reported as warnings instead of false-positive errors.
 4. Patch until errors are gone.
 5. Final reply:
    - file path

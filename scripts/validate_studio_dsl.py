@@ -2,8 +2,10 @@
 """Lightweight structural validator for internal KURO AI Studio DSL YAML.
 
 This catches the common "parseable but not runnable/importable" mistakes that
-show up in generated DSL files. It is intentionally conservative: warnings are
-allowed for placeholders, errors indicate issues to fix before delivery.
+show up in generated DSL files and real Studio exports. The default profile is
+export-friendly: runtime breakages are errors, while canvas decoration drift and
+static uncertainty are warnings. Use --profile generated for stricter checks on
+newly generated DSL files before delivery.
 """
 
 from __future__ import annotations
@@ -11,11 +13,13 @@ from __future__ import annotations
 import json
 import re
 import sys
+from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any
 
 RUNTIME_NODE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_]{1,50}$")
 RUNTIME_TEMPLATE_PATTERN = re.compile(r"\{\{#([a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9_]{0,29}){1,10})#\}\}")
+LOCAL_TEMPLATE_PATTERN = re.compile(r"\{\{#([a-zA-Z_][a-zA-Z0-9_]{0,50})#\}\}")
 LOOSE_TEMPLATE_PATTERN = re.compile(r"\{\{#([^#\n]+)#\}\}")
 SELECTOR_KEYS = {"value_selector", "variable_selector", "query_variable_selector", "iterator_selector", "output_selector"}
 TOOL_REQUIRED_FIELDS = {
@@ -33,6 +37,20 @@ CODE_OUTPUT_CAPS = {
     "array[number]": "1000 items",
 }
 TERMINAL_NODE_TYPES = {"answer", "end"}
+CANVAS_PROFILES = {"generated"}
+
+
+def add_issue(
+    *,
+    errors: list[str],
+    warnings: list[str],
+    message: str,
+    as_error: bool,
+) -> None:
+    if as_error:
+        errors.append(message)
+    else:
+        warnings.append(message)
 
 
 def load_dsl(path: Path) -> Any:
@@ -112,9 +130,10 @@ def condition_value_required(operator: str) -> str:
     return "scalar"
 
 
-def validate(path: Path) -> tuple[list[str], list[str]]:
+def validate(path: Path, profile: str = "base") -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+    strict_canvas = profile in CANVAS_PROFILES
 
     try:
         dsl = load_dsl(path)
@@ -164,7 +183,12 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
     iteration_output_nodes: set[str] = set()
 
     if mode != "agent-chat" and not isinstance(graph.get("viewport"), dict):
-        errors.append("workflow.graph.viewport must be present for canvas import")
+        add_issue(
+            errors=errors,
+            warnings=warnings,
+            message="workflow.graph.viewport should be present for generated/canvas-safe imports",
+            as_error=strict_canvas,
+        )
 
     for node in nodes:
         if not isinstance(node, dict):
@@ -177,8 +201,14 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             errors.append(f"node without id: {node}")
             continue
         if not RUNTIME_NODE_ID_PATTERN.fullmatch(node_id):
-            errors.append(
-                f"node id '{node_id}' is not runtime-template safe; use letters, numbers, or underscores only"
+            add_issue(
+                errors=errors,
+                warnings=warnings,
+                message=(
+                    f"node id '{node_id}' is not runtime-template safe if referenced in {{#node.output#}}; "
+                    "prefer letters, numbers, or underscores"
+                ),
+                as_error=strict_canvas,
             )
         if node_id in by_id:
             errors.append(f"duplicate node id: {node_id}")
@@ -193,18 +223,43 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
 
         if mode != "agent-chat":
             if node.get("type") != "custom":
-                errors.append(f"node '{node_title(node)}' top-level type must be custom for canvas rendering")
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=f"node '{node_title(node)}' top-level type should be custom for generated canvas DSL",
+                    as_error=strict_canvas,
+                )
             for key in ("position", "positionAbsolute"):
                 if not isinstance(node.get(key), dict):
-                    errors.append(f"node '{node_title(node)}' missing {key}")
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=f"node '{node_title(node)}' missing canvas field {key}",
+                        as_error=strict_canvas,
+                    )
             for key in ("sourcePosition", "targetPosition", "selected", "width", "height"):
                 if key not in node:
-                    errors.append(f"node '{node_title(node)}' missing canvas field {key}")
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=f"node '{node_title(node)}' missing canvas field {key}",
+                        as_error=strict_canvas,
+                    )
             if "zIndex" not in node:
-                warnings.append(f"node '{node_title(node)}' missing top-level zIndex; preserve/export or set 0/1002")
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=f"node '{node_title(node)}' missing top-level zIndex; preserve/export or set 0/1002",
+                    as_error=strict_canvas,
+                )
             for key in ("desc", "selected"):
                 if key not in data:
-                    errors.append(f"node '{node_title(node)}' data missing canvas field {key}")
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=f"node '{node_title(node)}' data missing canvas field {key}",
+                        as_error=strict_canvas,
+                    )
 
         outputs = collect_code_outputs(node)
         if node_type == "llm":
@@ -377,31 +432,54 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         for match in LOOSE_TEMPLATE_PATTERN.finditer(text):
             full = match.group(0)
             inner = match.group(1)
-            if not RUNTIME_TEMPLATE_PATTERN.fullmatch(full):
-                errors.append(
-                    f"template variable {full!r} at {string_path} is not runtime-parseable; "
-                    "use {{#node_id.output#}} with letters/numbers/underscores only"
+            local_match = LOCAL_TEMPLATE_PATTERN.fullmatch(full)
+            runtime_match = RUNTIME_TEMPLATE_PATTERN.fullmatch(full)
+            if local_match:
+                continue
+            if not runtime_match:
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=(
+                        f"template variable {full!r} at {string_path} is not a standard node selector; "
+                        "verify it is intentionally escaped or generated at runtime"
+                    ),
+                    as_error=strict_canvas and ".data.code" not in string_path,
                 )
                 continue
             selector = inner.split(".")
             src_id = selector[0]
             src_key = selector[1] if len(selector) > 1 else ""
+            in_code_string = ".data.code" in string_path
             if src_id in {"sys", "env", "conversation"}:
                 continue
             if src_id not in by_id:
-                errors.append(f"template variable {full!r} at {string_path} references missing node {src_id}")
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=f"template variable {full!r} at {string_path} references missing node {src_id}",
+                    as_error=not in_code_string,
+                )
             else:
                 source_type = node_type_by_id.get(src_id)
                 invalid_tool_data_selector = False
                 if source_type == "tool" and src_key == "data":
                     invalid_tool_data_selector = True
-                    errors.append(
-                        f"template variable {full!r} at {string_path} selects tool output 'data'; use 'json' instead"
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=f"template variable {full!r} at {string_path} selects tool output 'data'; use 'json' instead",
+                        as_error=not in_code_string,
                     )
                 if source_type == "iteration" and src_key == "item" and len(selector) > 2:
-                    errors.append(
-                        f"template variable {full!r} at {string_path} deep-selects iteration item; "
-                        "destructure item fields in a Code node"
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=(
+                            f"template variable {full!r} at {string_path} deep-selects iteration item; "
+                            "destructure item fields in a Code node"
+                        ),
+                        as_error=not in_code_string,
                     )
                 if (
                     not invalid_tool_data_selector
@@ -471,17 +549,37 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             in_degree[target] = in_degree.get(target, 0) + 1
         if mode != "agent-chat":
             if edge.get("type") != "custom":
-                errors.append(f"edge {edge.get('id')} type must be custom for canvas rendering")
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=f"edge {edge.get('id')} type should be custom for generated canvas DSL",
+                    as_error=strict_canvas,
+                )
             for key in ("sourceHandle", "targetHandle", "zIndex"):
                 if key not in edge:
-                    errors.append(f"edge {edge.get('id')} missing canvas field {key}")
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=f"edge {edge.get('id')} missing canvas field {key}",
+                        as_error=strict_canvas,
+                    )
             edge_data = edge.get("data")
             if not isinstance(edge_data, dict):
-                errors.append(f"edge {edge.get('id')} missing data mapping")
+                add_issue(
+                    errors=errors,
+                    warnings=warnings,
+                    message=f"edge {edge.get('id')} missing canvas data mapping",
+                    as_error=strict_canvas,
+                )
             else:
                 for key in ("isInIteration", "isInLoop", "sourceType", "targetType"):
                     if key not in edge_data:
-                        errors.append(f"edge {edge.get('id')} data missing {key}")
+                        add_issue(
+                            errors=errors,
+                            warnings=warnings,
+                            message=f"edge {edge.get('id')} data missing canvas field {key}",
+                            as_error=strict_canvas,
+                        )
 
     if mode != "agent-chat":
         executable_nodes = {
@@ -514,9 +612,14 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
                 if node_type in TERMINAL_NODE_TYPES or node_id in iteration_output_nodes:
                     continue
                 if in_degree.get(node_id, 0) > 0 and out_degree.get(node_id, 0) == 0:
-                    errors.append(
-                        f"reachable non-terminal node '{node_title(by_id[node_id])}' has no outgoing edge; "
-                        "connect it to a terminal node or an iteration output"
+                    add_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        message=(
+                            f"reachable non-terminal node '{node_title(by_id[node_id])}' has no outgoing edge; "
+                            "connect it to a terminal node or an iteration output"
+                        ),
+                        as_error=strict_canvas,
                     )
 
     for node_id, node in by_id.items():
@@ -535,13 +638,24 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("usage: validate_studio_dsl.py <path-to-yml>", file=sys.stderr)
-        return 2
-    path = Path(argv[1])
-    errors, warnings = validate(path)
+    parser = ArgumentParser(description="Validate internal KURO AI Studio DSL YAML.")
+    parser.add_argument("path", help="Path to a Studio/Dify DSL YAML file")
+    parser.add_argument(
+        "--profile",
+        choices=("base", "exported", "generated"),
+        default="base",
+        help=(
+            "base/exported keep canvas decoration drift as warnings; "
+            "generated treats generated-DSL canvas omissions as errors"
+        ),
+    )
+    args = parser.parse_args(argv[1:])
+
+    path = Path(args.path)
+    errors, warnings = validate(path, profile=args.profile)
     result = {
         "path": str(path),
+        "profile": args.profile,
         "ok": not errors,
         "errors": errors,
         "warnings": warnings,

@@ -68,7 +68,7 @@ If the user does not answer and still wants output, generate a file labeled as a
 6. **Validate before finalizing.**
    Run:
    ```bash
-   python scripts/validate_studio_dsl.py <path-to-yml>
+   python scripts/validate_studio_dsl.py --profile generated <path-to-yml>
    ```
    Fix errors. If warnings remain because placeholders are intentional, mention them clearly.
 
@@ -78,6 +78,9 @@ If the user does not answer and still wants output, generate a file labeled as a
 2. Identify the failing node or import/runtime constraint.
 3. Patch narrowly; preserve existing I/O contracts unless the user asks to change them.
 4. Re-run the validator.
+   - For real Studio exports or hand-patched production YAML, use the default/base profile:
+     `python scripts/validate_studio_dsl.py <path-to-yml>`.
+   - Use `--profile generated` only when checking a newly generated DSL skeleton where canvas-shape omissions should block delivery.
 5. Return the patched file path and the exact risk/warning that remains.
 
 Common repair targets:
@@ -115,6 +118,7 @@ Load only what is needed:
 - `references/source-docs.md`: source document paths and when to inspect them.
 
 Use `scripts/validate_studio_dsl.py` every time you create or patch a DSL file.
+Use the default profile for exported production YAML. Use `--profile generated` for new generated files before delivery.
 
 ## Output Style
 
