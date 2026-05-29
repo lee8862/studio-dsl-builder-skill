@@ -186,6 +186,21 @@ Rules:
 - Workflow tools are often stateless; pass `history_summary` and JSON-serialized `spec_so_far`.
 - Function-calling strategy value in the documented release is `function_call`.
 - Do not keep giant `yml_full` in memory after delivery; keep summary/id only.
+- Treat workflow-tool `provider_id` as a publish-time workspace binding, not an app ID. If a sub-workflow is re-imported or re-published, re-check the provider ID and tool configuration before claiming the agent is runnable.
+- When repairing an existing agent or workflow-tool setup, patch the latest exported YAML instead of regenerating from a blank graph. The export includes real provider IDs, canvas geometry, and provider metadata that generated skeletons cannot safely infer.
+- Keep sub-workflow inputs string-compatible. For object-like values, pass JSON strings and parse them in the child workflow.
+
+## Tool / MCP Integration Pattern
+
+Use when the app reads or writes external systems through Studio tools, MCP, or installed plugins.
+
+Rules:
+
+- Ask for the current workspace's exported tool node or provider binding before generating a fully runnable DSL.
+- If the binding is missing, generate an import-ready skeleton with placeholders and explicit warnings.
+- For MCP and plugin tool outputs, route downstream parsing through the tool node `json` output. Do not select a non-existent `data` output.
+- For installed `.difypkg` tools, preserve exported `provider_type: builtin`, `plugin_id`, `plugin_unique_identifier`, `tool_configurations`, and `tool_parameters`.
+- For Feishu/Lark actions, first map the domain with `feishu-mcp-guide.md`, then bind to the current workspace's installed MCP tool.
 
 ## Output File Pattern
 

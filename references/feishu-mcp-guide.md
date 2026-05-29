@@ -59,3 +59,9 @@ Do not embed Feishu user tokens, tenant access tokens, app secrets, cookies, or 
 - For direct Feishu OpenAPI HTTP nodes, prefer internal MCP services when available. Use raw OpenAPI token flows only when the user explicitly asks for direct HTTP or the needed MCP domain is unavailable.
 - For "directly generate" requests where the workspace MCP IDs are unknown, output an import-ready skeleton only after placing MCP IDs behind obvious placeholders such as `PLEASE_FILL_MCP_PROVIDER_ID`, `PLEASE_FILL_MCP_TOOL_NAME`, or `PLEASE_FILL_INSTALLED_TOOL_ID`; do not call it fully runnable.
 - After selecting MCP/tool resources, still validate normal Studio DSL rules: runtime-safe node IDs, canvas-safe graph fields, model provider/name, and selectors/templates.
+
+## Bitable Filters
+
+- Feishu Base single-select fields (`fieldType = 3`) do not behave like multi-value fields. Avoid generating array-based filters such as `isAnyOf` / `in` with multiple values for a single-select field unless a current tool schema explicitly supports it.
+- If the user needs "language is A or B or C" on a single-select field, prefer multiple single-value filters/queries and aggregate the records in Code.
+- Keep field type checks explicit in generated workflows that build bitable filter payloads. If field metadata is unknown, add a warning and use a placeholder instead of guessing the operator.

@@ -17,6 +17,22 @@ from typing import Any
 RUNTIME_NODE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_]{1,50}$")
 RUNTIME_TEMPLATE_PATTERN = re.compile(r"\{\{#([a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9_]{0,29}){1,10})#\}\}")
 LOOSE_TEMPLATE_PATTERN = re.compile(r"\{\{#([^#\n]+)#\}\}")
+SELECTOR_KEYS = {"value_selector", "variable_selector", "query_variable_selector", "iterator_selector", "output_selector"}
+TOOL_REQUIRED_FIELDS = {
+    "provider_id",
+    "provider_type",
+    "provider_name",
+    "tool_name",
+    "tool_label",
+    "tool_configurations",
+    "tool_parameters",
+}
+CODE_OUTPUT_CAPS = {
+    "array[string]": "30 items",
+    "array[object]": "30 items",
+    "array[number]": "1000 items",
+}
+TERMINAL_NODE_TYPES = {"answer", "end"}
 
 
 def load_dsl(path: Path) -> Any:
@@ -50,14 +66,40 @@ def iter_strings(value: Any, path: str = "$"):
             yield from iter_strings(item, f"{path}.{key}")
 
 
-def collect_code_outputs(node: dict[str, Any]) -> set[str]:
+def iter_selectors(value: Any, path: str = "$"):
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from iter_selectors(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            current_path = f"{path}.{key}"
+            if key in SELECTOR_KEYS and isinstance(item, list) and item:
+                yield current_path, item
+            yield from iter_selectors(item, current_path)
+
+
+def collect_output_types(node: dict[str, Any]) -> dict[str, str]:
     data = node.get("data") or {}
     outputs = data.get("outputs") or {}
     if isinstance(outputs, dict):
-        return set(outputs.keys())
+        result: dict[str, str] = {}
+        for key, value in outputs.items():
+            if isinstance(value, dict):
+                result[str(key)] = str(value.get("type") or "")
+            else:
+                result[str(key)] = ""
+        return result
     if isinstance(outputs, list):
-        return {str(item.get("variable")) for item in outputs if isinstance(item, dict) and item.get("variable")}
-    return set()
+        result = {}
+        for item in outputs:
+            if isinstance(item, dict) and item.get("variable"):
+                result[str(item["variable"])] = str(item.get("type") or "")
+        return result
+    return {}
+
+
+def collect_code_outputs(node: dict[str, Any]) -> set[str]:
+    return set(collect_output_types(node))
 
 
 def condition_value_required(operator: str) -> str:
@@ -116,8 +158,10 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         edges = []
 
     by_id: dict[str, dict[str, Any]] = {}
+    node_type_by_id: dict[str, str] = {}
     type_counts: dict[str, int] = {}
     output_by_node: dict[str, set[str]] = {}
+    iteration_output_nodes: set[str] = set()
 
     if mode != "agent-chat" and not isinstance(graph.get("viewport"), dict):
         errors.append("workflow.graph.viewport must be present for canvas import")
@@ -139,7 +183,13 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         if node_id in by_id:
             errors.append(f"duplicate node id: {node_id}")
         by_id[node_id] = node
+        node_type_by_id[node_id] = node_type
         type_counts[node_type] = type_counts.get(node_type, 0) + 1
+
+        if node_type == "iteration":
+            data_output_selector = data.get("output_selector")
+            if isinstance(data_output_selector, list) and data_output_selector:
+                iteration_output_nodes.add(str(data_output_selector[0]))
 
         if mode != "agent-chat":
             if node.get("type") != "custom":
@@ -150,6 +200,8 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             for key in ("sourcePosition", "targetPosition", "selected", "width", "height"):
                 if key not in node:
                     errors.append(f"node '{node_title(node)}' missing canvas field {key}")
+            if "zIndex" not in node:
+                warnings.append(f"node '{node_title(node)}' missing top-level zIndex; preserve/export or set 0/1002")
             for key in ("desc", "selected"):
                 if key not in data:
                     errors.append(f"node '{node_title(node)}' data missing canvas field {key}")
@@ -161,11 +213,78 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             outputs.add("result")
         elif node_type == "http-request":
             outputs.update({"body", "status_code", "headers", "files"})
+        elif node_type == "tool":
+            outputs.update({"text", "files", "json"})
+        elif node_type in {"template-transform", "variable-aggregator"}:
+            outputs.add("output")
+        elif node_type == "question-classifier":
+            outputs.add("class_name")
+        elif node_type == "iteration":
+            outputs.update({"output", "item"})
         elif node_type == "start":
             for var in data.get("variables") or []:
                 if isinstance(var, dict) and var.get("variable"):
                     outputs.add(str(var["variable"]))
         output_by_node[node_id] = outputs
+
+        if node_type == "start":
+            for var in data.get("variables") or []:
+                if not isinstance(var, dict):
+                    continue
+                var_type = var.get("type")
+                var_name = var.get("variable") or var.get("label") or "<unnamed>"
+                if var_type in {"number", "select", "file", "file-list"} and var.get("max_length") is not None:
+                    errors.append(f"start variable {var_name!r} type {var_type!r} must use max_length: null")
+                if var_type == "select":
+                    options = var.get("options")
+                    if not isinstance(options, list) or not options:
+                        errors.append(f"start select variable {var_name!r} must have a non-empty string options array")
+                    elif any(not isinstance(option, str) for option in options):
+                        errors.append(f"start select variable {var_name!r} options must be plain strings, not objects")
+
+        if node_type == "code":
+            for output_name, output_type in collect_output_types(node).items():
+                cap = CODE_OUTPUT_CAPS.get(output_type)
+                if cap:
+                    warnings.append(
+                        f"code node '{node_title(node)}' output {output_name!r} type {output_type} is capped by "
+                        f"runtime config (current default {cap})"
+                    )
+
+        if node_type == "tool":
+            missing = sorted(field for field in TOOL_REQUIRED_FIELDS if field not in data)
+            if missing:
+                errors.append(f"tool node '{node_title(node)}' missing runtime fields: {', '.join(missing)}")
+            if not isinstance(data.get("tool_configurations"), dict):
+                errors.append(f"tool node '{node_title(node)}' tool_configurations must be a mapping")
+            if not isinstance(data.get("tool_parameters"), dict):
+                errors.append(f"tool node '{node_title(node)}' tool_parameters must be a mapping")
+            provider_id = str(data.get("provider_id") or "")
+            provider_type = str(data.get("provider_type") or "")
+            if "PLEASE_FILL" in provider_id or provider_id.startswith("__REPLACE"):
+                warnings.append(f"tool node '{node_title(node)}' contains provider_id placeholder")
+            if provider_type == "plugin":
+                errors.append(
+                    f"tool node '{node_title(node)}' uses provider_type 'plugin'; installed plugin workflow nodes "
+                    "should normally use provider_type 'builtin' with plugin metadata preserved"
+                )
+            if provider_type == "mcp":
+                for optional_field in ("is_team_authorization", "plugin_id", "plugin_unique_identifier"):
+                    if optional_field not in data:
+                        warnings.append(
+                            f"MCP tool node '{node_title(node)}' missing exported provider metadata {optional_field!r}; "
+                            "copy a full tool node from the same workspace when possible"
+                        )
+                if not any(field in data for field in ("provider_icon", "icon")):
+                    warnings.append(
+                        f"MCP tool node '{node_title(node)}' missing exported provider icon metadata; "
+                        "copy a full tool node from the same workspace when possible"
+                    )
+            if isinstance(data.get("output_schema"), dict):
+                warnings.append(
+                    f"tool node '{node_title(node)}' has output_schema; downstream selectors should still use "
+                    "'json', 'text', or explicit streamed variables, not output_schema.properties directly"
+                )
 
         if node_type == "llm":
             model = data.get("model") or {}
@@ -271,8 +390,57 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
                 continue
             if src_id not in by_id:
                 errors.append(f"template variable {full!r} at {string_path} references missing node {src_id}")
-            elif src_key not in output_by_node.get(src_id, set()) and output_by_node.get(src_id):
-                warnings.append(f"template variable {full!r} at {string_path} not declared in upstream outputs")
+            else:
+                source_type = node_type_by_id.get(src_id)
+                invalid_tool_data_selector = False
+                if source_type == "tool" and src_key == "data":
+                    invalid_tool_data_selector = True
+                    errors.append(
+                        f"template variable {full!r} at {string_path} selects tool output 'data'; use 'json' instead"
+                    )
+                if source_type == "iteration" and src_key == "item" and len(selector) > 2:
+                    errors.append(
+                        f"template variable {full!r} at {string_path} deep-selects iteration item; "
+                        "destructure item fields in a Code node"
+                    )
+                if (
+                    not invalid_tool_data_selector
+                    and src_key not in output_by_node.get(src_id, set())
+                    and output_by_node.get(src_id)
+                ):
+                    warnings.append(f"template variable {full!r} at {string_path} not declared in upstream outputs")
+
+    checked_selectors: set[tuple[str, str]] = set()
+    for selector_path, selector in iter_selectors(dsl):
+        if len(selector) < 2:
+            continue
+        src_id = str(selector[0])
+        src_key = str(selector[1])
+        if src_id in {"", "sys", "env", "conversation"}:
+            continue
+        selector_key = (selector_path, selector_text(selector))
+        if selector_key in checked_selectors:
+            continue
+        checked_selectors.add(selector_key)
+        if src_id not in by_id:
+            errors.append(f"selector {selector_text(selector)} at {selector_path} references missing node {src_id}")
+            continue
+        source_type = node_type_by_id.get(src_id)
+        invalid_tool_data_selector = False
+        if source_type == "tool" and src_key == "data":
+            invalid_tool_data_selector = True
+            errors.append(f"selector {selector_text(selector)} at {selector_path} selects tool output 'data'; use 'json'")
+        if source_type == "iteration" and src_key == "item" and len(selector) > 2:
+            errors.append(
+                f"selector {selector_text(selector)} at {selector_path} deep-selects iteration item; "
+                "destructure item fields in a Code node"
+            )
+        if (
+            not invalid_tool_data_selector
+            and src_key not in output_by_node.get(src_id, set())
+            and output_by_node.get(src_id)
+        ):
+            warnings.append(f"selector {selector_text(selector)} at {selector_path} not declared in upstream outputs")
 
     if mode == "workflow" and type_counts.get("answer", 0):
         errors.append("workflow mode must not use answer nodes")
@@ -282,6 +450,10 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         errors.append("advanced-chat mode must not use end nodes")
     if mode == "advanced-chat" and not type_counts.get("answer", 0):
         errors.append("advanced-chat mode must include at least one answer node")
+
+    adjacency: dict[str, list[str]] = {node_id: [] for node_id in by_id}
+    in_degree: dict[str, int] = {node_id: 0 for node_id in by_id}
+    out_degree: dict[str, int] = {node_id: 0 for node_id in by_id}
 
     for edge in edges:
         if not isinstance(edge, dict):
@@ -293,6 +465,10 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
             errors.append(f"edge {edge.get('id')} references missing source {source}")
         if target not in by_id:
             errors.append(f"edge {edge.get('id')} references missing target {target}")
+        if source in by_id and target in by_id:
+            adjacency.setdefault(source, []).append(target)
+            out_degree[source] = out_degree.get(source, 0) + 1
+            in_degree[target] = in_degree.get(target, 0) + 1
         if mode != "agent-chat":
             if edge.get("type") != "custom":
                 errors.append(f"edge {edge.get('id')} type must be custom for canvas rendering")
@@ -306,6 +482,42 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
                 for key in ("isInIteration", "isInLoop", "sourceType", "targetType"):
                     if key not in edge_data:
                         errors.append(f"edge {edge.get('id')} data missing {key}")
+
+    if mode != "agent-chat":
+        executable_nodes = {
+            node_id
+            for node_id, node in by_id.items()
+            if node.get("type") != "custom-note" and node_type_by_id.get(node_id)
+        }
+        start_ids = [node_id for node_id in executable_nodes if node_type_by_id.get(node_id) == "start"]
+        if not start_ids:
+            errors.append("graph must include a start node")
+        else:
+            reachable: set[str] = set()
+            queue = list(start_ids)
+            while queue:
+                current = queue.pop(0)
+                if current in reachable:
+                    continue
+                reachable.add(current)
+                current_node = by_id.get(current) or {}
+                current_data = current_node.get("data") or {}
+                if node_type_by_id.get(current) == "iteration" and current_data.get("start_node_id"):
+                    queue.append(str(current_data["start_node_id"]))
+                queue.extend(adjacency.get(current, []))
+
+            for node_id in sorted(executable_nodes - reachable):
+                warnings.append(f"node '{node_title(by_id[node_id])}' is unreachable from start")
+
+            for node_id in sorted(reachable & executable_nodes):
+                node_type = node_type_by_id.get(node_id, "")
+                if node_type in TERMINAL_NODE_TYPES or node_id in iteration_output_nodes:
+                    continue
+                if in_degree.get(node_id, 0) > 0 and out_degree.get(node_id, 0) == 0:
+                    errors.append(
+                        f"reachable non-terminal node '{node_title(by_id[node_id])}' has no outgoing edge; "
+                        "connect it to a terminal node or an iteration output"
+                    )
 
     for node_id, node in by_id.items():
         data = node.get("data") or {}

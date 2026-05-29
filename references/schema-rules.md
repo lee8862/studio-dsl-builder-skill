@@ -32,6 +32,7 @@ Each node:
 - `position` and `positionAbsolute`
 - `sourcePosition: right`, `targetPosition: left`
 - top-level `selected: false`, `width`, `height`
+- top-level `zIndex`; use `0` for normal top-level nodes and preserve exported values for iteration children
 - `data.desc` and `data.selected: false`
 
 Each edge:
@@ -80,7 +81,7 @@ Allowed variable types include `text-input`, `paragraph`, `number`, `select`, `f
 Rules:
 
 - `number`, `select`, `file`, and `file-list` use `max_length: null`.
-- `select` requires `options`.
+- `select` requires `options`, and `options` must be a plain string array such as `["A", "B"]`. Do not use `{label, value}` option objects in Start variables.
 - `advanced-chat` commonly uses `variables: []` and reads the user message via `{{#sys.query#}}`; only add Start variables when needed.
 - There is no native `object` Start type. For JSON/spec input in workflow tools, use `paragraph` and parse with Code.
 
@@ -103,8 +104,17 @@ Rules:
 - Python `return` keys should match `data.outputs`.
 - Use try/except for LLM JSON parsing and external data normalization.
 - Studio Code node sandbox commonly supports `json`, `re`, `math`, `datetime`, `string`, `base64`, `hashlib`, `uuid`, and `urllib.parse`.
+- Code output values are capped by runtime config. Current internal defaults observed in source are `string <= 400000 chars`, `array[string] <= 30 items`, `array[object] <= 30 items`, and `array[number] <= 1000 items`. Keep large lists/files as strings, paginated chunks, or external references instead of returning giant arrays.
 
 Use a Code node to create constant values for `end` outputs. Do not put raw constants directly into `end.outputs[].value_selector`.
+
+## Iteration Node
+
+Rules:
+
+- Inside an iteration, use the iteration item selector as `{{#iteration_id.item#}}` or `[iteration_id, item]`.
+- Do not rely on deep selectors such as `[iteration_id, item, batch]`; destructure nested item fields in a Code node and expose explicit outputs.
+- Keep pure transforms outside the iteration when possible. The workflow execution step limit counts inner iteration nodes too, so large loops can hit the default workflow step cap.
 
 ## If-Else Node
 
@@ -186,11 +196,35 @@ Rules:
 
 Tool nodes are provider-specific. Do not generate arbitrary Tool nodes unless the provider schema is known.
 
+Every active tool node must include the runtime fields:
+
+- `provider_id`
+- `provider_type`
+- `provider_name`
+- `tool_name`
+- `tool_label`
+- `tool_configurations`
+- `tool_parameters`
+
+Tool node JSON output is selected via `json`, not `data`. Use `[tool_node_id, json]` or `{{#tool_node_id.json#}}`, then parse it in Code. Tool nodes also commonly expose `text` and `files`.
+
 MCP-backed tool nodes are also workspace-specific:
 
 - A Feishu MCP service URL tells which domain to use, but not the installed provider/tool/node IDs in the user's Studio space.
 - Do not hardcode MCP provider IDs, tool IDs, or installed-node IDs from another workspace.
 - If the user has not provided the current workspace's MCP binding or an exported sample node, ask for it or use explicit placeholders and mark the DSL as an import-ready skeleton, not fully runnable.
+- Prefer copying the full exported MCP tool node from the same workspace. UI/provider metadata such as `is_team_authorization`, `plugin_id`, `plugin_unique_identifier`, `provider_icon`/`icon`, and credential placeholders can matter for import/editor behavior even when not all are part of backend runtime validation.
+- Do not reconstruct MCP provider metadata from a service URL alone.
+
+Installed plugin tools from `.difypkg` should normally use `provider_type: builtin` with plugin metadata (`plugin_id` and `plugin_unique_identifier`) preserved from export. Do not use `provider_type: plugin` for ordinary installed-plugin workflow nodes unless a current exported sample proves that exact shape.
+
+Workflow tools are workspace and publish-state bound:
+
+- `app_id` is not the same as workflow-tool `provider_id`.
+- After publishing a workflow as a tool, get the workflow-tool provider ID from the current workspace, for example via the console workflow-tool provider lookup, then patch the agent/tool node.
+- Re-importing or rebuilding YAML can invalidate provider IDs and tool configurations. For repair/back-write work, start from the current exported YAML whenever possible.
+- WorkflowTool calls are stateless and pass only inputs/files. If a workflow-tool input needs an object, JSON-serialize it into a `paragraph`/string Start variable and parse it in Code.
+- Nested workflow calls are limited by workflow execution time, execution steps, and call depth; keep sub-workflows small and avoid unbounded iterations.
 
 For file export in the existing KURO DSL generator, the known exporter is:
 
